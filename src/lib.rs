@@ -3,6 +3,7 @@
 
 use rand::prelude::*;
 use std::ops::{Mul, Sub};
+use tracing::{event, span, Level};
 
 /// A position, rotation, or something else.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -196,6 +197,19 @@ impl Tri2 {
 
         side_ab == side_bc && side_bc == side_ca
     }
+    /// Returns the bounding box of the triangle in a pair of coordinates (top-left, and
+    /// bottom-right).
+    pub fn bounding_box(self) -> (Vec2, Vec2) {
+        let top_left = Vec2 {
+            x: self.points.iter().map(|v| v.x).reduce(f64::min).unwrap(),
+            y: self.points.iter().map(|v| v.y).reduce(f64::min).unwrap(),
+        };
+        let bottom_right = Vec2 {
+            x: self.points.iter().map(|v| v.x).reduce(f64::max).unwrap(),
+            y: self.points.iter().map(|v| v.y).reduce(f64::max).unwrap(),
+        };
+        (top_left, bottom_right)
+    }
 }
 
 impl rand::distr::Distribution<Tri2> for rand::distr::StandardUniform {
@@ -211,7 +225,7 @@ impl rand::distr::Distribution<Tri2> for rand::distr::StandardUniform {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scene {
     /// The output.
-    output: Box<[[Vec3; 512]; 512]>,
+    output: Box<[[Vec3; 600]; 600]>,
     /// The triangle.
     triangles: Vec<Tri2>,
 }
@@ -222,16 +236,21 @@ impl Default for Scene {
     }
 }
 
-impl Scene {
-    /// Create a new Scene.
-    pub fn new() -> Self {
-        Self {
-            output: Box::new(
-                [[Vec3 {
+/// default output (all black)
+static DEFAULT_OUTPUT: [[Vec3; 600]; 600] = [[Vec3 {
                     x: 0.0,
                     y: 0.0,
                     z: 0.0,
-                }; 512]; 512],
+                }; 600]; 600];
+
+impl Scene {
+    /// Create a new Scene.
+    pub fn new() -> Self {
+        let span = span!(Level::TRACE, "initalize_scene");
+        let _enter = span.enter();
+        Self {
+            output: Box::new(
+                DEFAULT_OUTPUT
             ),
             triangles: vec![
                 Tri2 {
@@ -255,9 +274,21 @@ impl Scene {
     }
     /// Render this Scene.
     pub fn render(&mut self) {
-        for (y, row) in self.output.iter_mut().enumerate() {
-            for (x, color) in row.iter_mut().enumerate() {
-                for triangle in &self.triangles {
+        let span = span!(Level::TRACE, "render_scene");
+        let _enter = span.enter();
+        
+        for triangle in &self.triangles {
+            let (top_left, bottom_right) = triangle.bounding_box();
+            event!(Level::TRACE, "calculated triangle bounding box: {top_left:#?}, {bottom_right:#?}");
+
+            for (y, row) in self.output[top_left.x as usize..bottom_right.x as usize]
+                .iter_mut()
+                .enumerate()
+            {
+                for (x, color) in row[top_left.y as usize..bottom_right.y as usize]
+                    .iter_mut()
+                    .enumerate()
+                {
                     if triangle.inside(Vec2 {
                         x: x as f64,
                         y: y as f64,

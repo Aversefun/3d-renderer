@@ -10,6 +10,8 @@ image_types = ["dep:image"]
 sdl3 = ["dep:sdl3"]
 
 [dependencies]
+error-stack = "0.5.0"
 image = { version="0.25.6", optional = true }
 rand = "0.9.1"
 sdl3 = { version="0.14.31", optional = true }
+tracing = "0.1.41"
